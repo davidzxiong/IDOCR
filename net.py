@@ -44,12 +44,11 @@ class LSTM(nn.Module):
         self.linear.weight.data.uniform_(-0.1, 0.1)
         self.linear.bias.data.fill_(0)
 
-    def forward(self, features, captions, lengths):
+    def forward(self, features, captions):
         """Decode image feature vectors and generates captions."""
         embeddings = self.embed(captions)
         embeddings = torch.cat((features.unsqueeze(1), embeddings), 1)
-        packed = pack_padded_sequence(embeddings, lengths, batch_first=True)
-        hiddens, _ = self.lstm(packed)
+        hiddens, _ = self.lstm(embeddings)
         outputs = self.linear(hiddens[0])
         return outputs
 
@@ -66,11 +65,3 @@ class LSTM(nn.Module):
             inputs = inputs.unsqueeze(1)  # (batch_size, 1, embed_size)
         sampled_ids = torch.cat(sampled_ids, 1)  # (batch_size, 20)
         return sampled_ids.squeeze()
-
-torch.manual_seed(1)
-word_to_ix = {"hello": 0, "world": 1}
-embeds = nn.Embedding(2, 5)  # 2 words in vocab, 5 dimensional embeddings
-lookup_tensor = torch.LongTensor([word_to_ix["hello"]])
-hello_embed = embeds(Variable(lookup_tensor))
-print(hello_embed)
-print(embeds(Variable(torch.LongTensor([1]))))

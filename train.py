@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import os
-from dataloader import IDDataset
+from dataset import IDDataset, collate_fn
 from net import CNN, LSTM
 from torch.autograd import Variable
 from torch.nn.utils.rnn import pack_padded_sequence
@@ -29,7 +29,8 @@ def main(args):
 
     # Build data loader
     data_loader = DataLoader(training_data, batch_size=args.batch_size,
-                            shuffle=True, num_workers=args.num_workers)
+                            shuffle=True, num_workers=args.num_workers,
+                             collate_fn=collate_fn)
 
     # Build the models
     encoder = CNN(args.embed_size)
@@ -48,19 +49,18 @@ def main(args):
     # Train the Models
     total_step = len(data_loader)
     for epoch in range(args.num_epochs):
-        for i, (images, captions, lengths) in enumerate(data_loader):
-
+        for i, (image_batch, id_batch) in enumerate(data_loader):
+            print(type(id_batch),id_batch.size(), image_batch.size())
             # Set mini-batch dataset
-            images = to_var(images, volatile=True)
-            captions = to_var(captions)
-            targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
+            images = to_var(image_batch, volatile=True)
+            captions = to_var(id_batch)
 
             # Forward, Backward and Optimize
             decoder.zero_grad()
             encoder.zero_grad()
             features = encoder(images)
-            outputs = decoder(features, captions, lengths)
-            loss = criterion(outputs, targets)
+            outputs = decoder(features, captions)
+            loss = criterion(outputs, captions)
             loss.backward()
             optimizer.step()
 
@@ -82,19 +82,10 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_path', type=str, default='./models/',
+    parser.add_argument('--model_path', type=str, default='./model/',
                         help='path for saving trained models')
-    parser.add_argument('--crop_size', type=int, default=224,
-                        help='size for randomly cropping images')
-    parser.add_argument('--vocab_path', type=str, default='./data/vocab.pkl',
-                        help='path for vocabulary wrapper')
-    parser.add_argument('--image_dir', type=str, default='./data/resized2014',
-                        help='directory for resized images')
-    parser.add_argument('--caption_path', type=str,
-                        default='./data/annotations/captions_train2014.json',
-                        help='path for train annotation json file')
     parser.add_argument('--log_step', type=int, default=10,
-                        help='step size for prining log info')
+                        help='step size for printing log info')
     parser.add_argument('--save_step', type=int, default=1000,
                         help='step size for saving trained models')
 
