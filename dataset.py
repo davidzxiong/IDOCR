@@ -5,6 +5,19 @@ import torch
 from torch.utils.data import Dataset
 from PIL import Image
 
+# vocabulary 0~9 and X for ID number
+vocab = dict()
+idx_to_word = dict()
+for i in xrange(10):
+    vocab[str(i)] = i
+    idx_to_word[i] = str(i)
+vocab['X'] = 10
+vocab['<start>'] = 11
+idx_to_word[10] = 'X'
+idx_to_word[11] = '<start>'
+
+
+
 
 class IDDataset(Dataset):
     """ID dataset."""
@@ -27,20 +40,13 @@ class IDDataset(Dataset):
             std = np.std(image)
             self.data[:,:, idx] = (image - mean) / std
 
-        # vocabulary 0~9 and X for ID number
-        vocab = dict()
-        for i in xrange(10):
-            vocab[str(i)] = i
-        vocab['X'] = 10
-        vocab['<start>'] = 11
-        self.vocab = vocab
-
     def __len__(self):
         return len(self.files)
 
     def __getitem__(self, idx):
-        id = [self.vocab[i] for i in self.files[idx][:-4]]
-        id = torch.Tensor([self.vocab['<start>']] + id)
+        id = [vocab[i] for i in self.files[idx][:-4]]
+        id = [vocab['<start>']] + id
+        id = torch.Tensor(id)
         image = torch.Tensor(self.data[:,:,idx])
         image_tensor = torch.zeros(1, image.shape[0], image.shape[1]).float()
         image_tensor[0,:,:] = image

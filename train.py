@@ -4,12 +4,33 @@ import torch
 import torch.nn as nn
 import numpy as np
 import os
-from dataset import IDDataset, collate_fn
+from dataset import IDDataset, collate_fn, vocab, idx_to_word
 from net import CNN, LSTM
 from torch.autograd import Variable
-from torch.nn.utils.rnn import pack_padded_sequence
 from torch.utils.data import DataLoader
 
+def evaluation(data, encoder, decoder):
+    correct_count = 0
+    for i in xrange(len(data)):
+        image, id = data[i]
+        image_tensor = to_var(image.unsqueeze(0))
+        # Generate caption from image
+        feature = encoder(image_tensor)
+        start = torch.LongTensor([vocab['<start>']]).unsqueeze(0)
+        start = to_var(start)
+        sampled_ids = decoder.sample(feature, start)
+        sampled_ids = sampled_ids.cpu().data.numpy()
+
+        # Decode word_ids to words
+        sampled_caption = []
+        for word_id in sampled_ids:
+            word = idx_to_word[word_id]
+            sampled_caption.append(word)
+        sentence = ''.join(sampled_caption)
+        # Print out image and generated caption.
+        if list(sampled_ids) == list(id.long().numpy()):
+            correct_count += 1
+    return correct_count / len(data)
 
 def to_var(x, volatile=False):
     if torch.cuda.is_available():
@@ -25,6 +46,7 @@ def main(args):
     # load data set
     is_training = True
     training_data = IDDataset(is_training);
+    testing_data = IDDataset(not is_training);
 
 
     # Build data loader
@@ -33,9 +55,9 @@ def main(args):
                              collate_fn=collate_fn)
 
     # Build the models
-    encoder = CNN(args.embed_size)
+    encoder = CNN(args.hidden_size)
     decoder = LSTM(args.embed_size, args.hidden_size,
-                         len(training_data.vocab), args.num_layers)
+                         len(vocab), args.num_layers)
 
     if torch.cuda.is_available():
         encoder.cuda()
@@ -50,25 +72,33 @@ def main(args):
     total_step = len(data_loader)
     for epoch in range(args.num_epochs):
         for i, (image_batch, id_batch) in enumerate(data_loader):
-            print(type(id_batch),id_batch.size(), image_batch.size())
             # Set mini-batch dataset
-            images = to_var(image_batch, volatile=True)
+            images = to_var(image_batch)
             captions = to_var(id_batch)
+            targets = to_var(id_batch[:,1:])
 
             # Forward, Backward and Optimize
             decoder.zero_grad()
             encoder.zero_grad()
             features = encoder(images)
             outputs = decoder(features, captions)
-            loss = criterion(outputs, captions)
+            loss = 0
+            id_len = targets.size()[1]
+            for j in xrange(id_len):
+                loss += criterion(outputs[:,j,:], targets[:,j]) / id_len
             loss.backward()
             optimizer.step()
 
             # Print log info
             if i % args.log_step == 0:
-                print('Epoch [%d/%d], Step [%d/%d], Loss: %.4f, Perplexity: %5.4f'
+                print('Epoch [%d/%d], Step [%d/%d], Loss: %.4f'
                       % (epoch, args.num_epochs, i, total_step,
-                         loss.data[0], np.exp(loss.data[0])))
+                         loss.cpu().data.numpy()))
+
+            if (i+1) %  500 == 0:
+                testing_acc = evaluation(testing_data, encoder, decoder)
+                print('Accuracy: %.4f' % testing_acc)
+
 
                 # Save the models
             if (i + 1) % args.save_step == 0:
@@ -97,10 +127,10 @@ if __name__ == '__main__':
     parser.add_argument('--num_layers', type=int, default=1,
                         help='number of layers in lstm')
 
-    parser.add_argument('--num_epochs', type=int, default=5)
+    parser.add_argument('--num_epochs', type=int, default=100)
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--num_workers', type=int, default=2)
-    parser.add_argument('--learning_rate', type=float, default=0.001)
+    parser.add_argument('--learning_rate', type=float, default=0.01)
     args = parser.parse_args()
     print(args)
     main(args)

@@ -2,17 +2,17 @@ from __future__ import print_function
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
-from torch.nn.utils.rnn import pack_padded_sequence
+from dataset import vocab
 from torch.autograd import Variable
 
 class CNN(nn.Module):
-    def __init__(self, embed_size):
+    def __init__(self, hidden_size):
         super(CNN, self).__init__()
         self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
         self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
         self.conv2_drop = nn.Dropout2d()
-        self.linear = nn.Linear(320, embed_size)
-        self.bn = nn.BatchNorm1d(embed_size, momentum=0.01)
+        self.linear = nn.Linear(20 * 27 * 137, hidden_size)
+        self.bn = nn.BatchNorm1d(hidden_size, momentum=0.01)
         self.init_weights()
 
     def init_weights(self):
@@ -23,9 +23,8 @@ class CNN(nn.Module):
     def forward(self, image):
         x = F.relu(F.max_pool2d(self.conv1(image), 2))
         x = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(x)), 2))
-        x = x.view(-1, 320)
+        x = x.view(-1, 20 * 27 * 137)
         features = self.bn(self.linear(x))
-
         return features
 
 
@@ -37,6 +36,8 @@ class LSTM(nn.Module):
         self.lstm = nn.LSTM(embed_size, hidden_size, num_layers, batch_first=True)
         self.linear = nn.Linear(hidden_size, vocab_size)
         self.init_weights()
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
 
     def init_weights(self):
         """Initialize weights."""
@@ -46,22 +47,30 @@ class LSTM(nn.Module):
 
     def forward(self, features, captions):
         """Decode image feature vectors and generates captions."""
-        embeddings = self.embed(captions)
-        embeddings = torch.cat((features.unsqueeze(1), embeddings), 1)
-        hiddens, _ = self.lstm(embeddings)
-        outputs = self.linear(hiddens[0])
-        return outputs
+        embeddings = self.embed(captions[:,:-1])
+        batch_size = features.size()[0]
+        cell_state = Variable(torch.zeros(self.num_layers, batch_size, self.hidden_size).cuda())
+        hidden_state = Variable(torch.zeros(self.num_layers, batch_size, self.hidden_size).cuda())
+        for i in xrange(self.num_layers):
+            hidden_state[i, :, :] = features
+        output, _ = self.lstm(embeddings, (hidden_state, cell_state))
+        output = self.linear(output)
+        return output
 
-    def sample(self, features, states=None):
+    def sample(self, features, start):
         """Samples captions for given image features (Greedy search)."""
         sampled_ids = []
-        inputs = features.unsqueeze(1)
-        for i in range(20):  # maximum sampling length
-            hiddens, states = self.lstm(inputs, states)  # (batch_size, 1, hidden_size),
-            outputs = self.linear(hiddens.squeeze(1))  # (batch_size, vocab_size)
-            predicted = outputs.max(1)[1]
+        cell_state = Variable(torch.zeros(self.num_layers, 1, self.hidden_size).cuda())
+        hidden_state = Variable(torch.zeros(self.num_layers, 1, self.hidden_size).cuda())
+        for i in xrange(self.num_layers):
+            hidden_state[i, :, :] = features
+        states = (hidden_state, cell_state)
+        inputs = self.embed(start)
+        for i in range(18):  # maximum sampling length
+            output, states = self.lstm(inputs, states)  # (batch_size, 1, hidden_size)
+            output = self.linear(output)  # (batch_size, vocab_size)
+            predicted = output.max(2)[1]
             sampled_ids.append(predicted)
             inputs = self.embed(predicted)
-            inputs = inputs.unsqueeze(1)  # (batch_size, 1, embed_size)
         sampled_ids = torch.cat(sampled_ids, 1)  # (batch_size, 20)
         return sampled_ids.squeeze()
