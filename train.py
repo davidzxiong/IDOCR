@@ -9,29 +9,6 @@ from net import CNN, LSTM
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 
-def evaluation(data, encoder, decoder):
-    correct_count = 0
-    for i in xrange(len(data)):
-        image, id = data[i]
-        image_tensor = to_var(image.unsqueeze(0))
-        # Generate caption from image
-        feature = encoder(image_tensor)
-        start = torch.LongTensor([vocab['<start>']]).unsqueeze(0)
-        start = to_var(start)
-        sampled_ids = decoder.sample(feature, start)
-        sampled_ids = sampled_ids.cpu().data.numpy()
-
-        # Decode word_ids to words
-        sampled_caption = []
-        for word_id in sampled_ids:
-            word = idx_to_word[word_id]
-            sampled_caption.append(word)
-        sentence = ''.join(sampled_caption)
-        # Print out image and generated caption.
-        if list(sampled_ids) == list(id.long().numpy()):
-            correct_count += 1
-    return correct_count / len(data)
-
 def to_var(x, volatile=False):
     if torch.cuda.is_available():
         x = x.cuda()
@@ -46,7 +23,7 @@ def main(args):
     # load data set
     is_training = True
     training_data = IDDataset(is_training);
-    testing_data = IDDataset(not is_training);
+    testing_data = IDDataset(not is_training)
 
 
     # Build data loader
@@ -95,19 +72,13 @@ def main(args):
                       % (epoch, args.num_epochs, i, total_step,
                          loss.cpu().data.numpy()))
 
-            if (i+1) %  500 == 0:
-                testing_acc = evaluation(testing_data, encoder, decoder)
-                print('Accuracy: %.4f' % testing_acc)
-
-
-                # Save the models
-            if (i + 1) % args.save_step == 0:
-                torch.save(decoder.state_dict(),
-                           os.path.join(args.model_path,
-                                        'decoder-%d-%d.pkl' % (epoch + 1, i + 1)))
-                torch.save(encoder.state_dict(),
-                           os.path.join(args.model_path,
-                                        'encoder-%d-%d.pkl' % (epoch + 1, i + 1)))
+    # Save the models
+    torch.save(decoder.state_dict(),
+               os.path.join(args.model_path,
+                            'decoder-%d-%d.pkl' % (epoch + 1, i + 1)))
+    torch.save(encoder.state_dict(),
+               os.path.join(args.model_path,
+                            'encoder-%d-%d.pkl' % (epoch + 1, i + 1)))
 
 
 if __name__ == '__main__':
@@ -120,7 +91,7 @@ if __name__ == '__main__':
                         help='step size for saving trained models')
 
     # Model parameters
-    parser.add_argument('--embed_size', type=int, default=256,
+    parser.add_argument('--embed_size', type=int, default=16,
                         help='dimension of word embedding vectors')
     parser.add_argument('--hidden_size', type=int, default=512,
                         help='dimension of lstm hidden states')
@@ -128,9 +99,9 @@ if __name__ == '__main__':
                         help='number of layers in lstm')
 
     parser.add_argument('--num_epochs', type=int, default=100)
-    parser.add_argument('--batch_size', type=int, default=128)
-    parser.add_argument('--num_workers', type=int, default=2)
-    parser.add_argument('--learning_rate', type=float, default=0.01)
+    parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--num_workers', type=int, default=1)
+    parser.add_argument('--learning_rate', type=float, default=0.001)
     args = parser.parse_args()
     print(args)
     main(args)

@@ -24,21 +24,22 @@ class IDDataset(Dataset):
 
     def __init__(self, training):
         cur_dir = os.path.dirname(__file__)
-        path = os.path.join(cur_dir, 'data/id/')
+        path = os.path.join(cur_dir, 'data/id_color/')
         files = os.listdir(path)
         if training:
             self.files = files[:int(len(files)*0.9)]
         else:
             self.files = files[int(len(files)*0.9):]
         self.root_dir = path
-        self.data = np.zeros([120, 560, len(self.files)])
+        self.data = np.zeros([len(self.files), 3, 224, 224])
         for idx in xrange(len(self.files)):
             img_file = self.files[idx]
             image = Image.open(os.path.join(path, img_file))
             image = np.array(image)
-            mean = np.mean(image)
-            std = np.std(image)
-            self.data[:,:, idx] = (image - mean) / std
+            for c in xrange(3):
+                mean = np.mean(image[:,:,c])
+                std = np.std(image[:,:,c])
+                self.data[idx,c,:,:] = (image[:,:,c] - mean) / std
 
     def __len__(self):
         return len(self.files)
@@ -47,10 +48,8 @@ class IDDataset(Dataset):
         id = [vocab[i] for i in self.files[idx][:-4]]
         id = [vocab['<start>']] + id
         id = torch.Tensor(id)
-        image = torch.Tensor(self.data[:,:,idx])
-        image_tensor = torch.zeros(1, image.shape[0], image.shape[1]).float()
-        image_tensor[0,:,:] = image
-        return image_tensor, id
+        image = torch.Tensor(self.data[idx,:,:,:]).float()
+        return image, id
 
 
 def collate_fn(data):

@@ -20,12 +20,13 @@ class IDCropper(object):
         self.y1 = y1
         self.y2 = y2
 
-    def crop(self, gray):
+    def crop(self, image):
         """
         Crop out a bounding box of ID number from grayscale img
         :param gray:
         :return: cropped img containing ID number
         """
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         assert len(gray.shape) == 2
 
         img_h, img_l = gray.shape
@@ -46,21 +47,22 @@ class IDCropper(object):
         roi_y1 = max(0, y + int(self.y1 * h))
         roi_y2 = min(img_h-1, y + int(self.y2 * h))
 
-        roi = gray[roi_y1:roi_y2, roi_x1:roi_x2]
+        roi = image[roi_y1:roi_y2, roi_x1:roi_x2,:]
 
         if roi_y1 >= roi_y2 or roi_x1 >= roi_x2:
             # Error: Detected face is not in reasonable positions.
             return None
 
-        roi = cv2.resize(roi, (560, 120), interpolation=cv2.INTER_CUBIC)
+        roi = cv2.resize(roi, (224, 224), interpolation=cv2.INTER_CUBIC)
         return roi
 
 if __name__ == '__main__':
     cur_dir = os.path.dirname(__file__)
-    path = os.path.join(cur_dir, 'data/imgs/')
-    files = os.listdir(path)
+    file_name_path = os.path.join(cur_dir, 'data/id/')
+    files = os.listdir(file_name_path)
+    image_path = os.path.join(cur_dir, 'data/imgs/')
 
-    output_path = os.path.join(cur_dir, 'data/id/')
+    output_path = os.path.join(cur_dir, 'data/id_color/')
 
     if not os.path.exists(output_path):
         os.mkdir(output_path)
@@ -72,17 +74,20 @@ if __name__ == '__main__':
         file = files[idx]
         print idx, file
 
-        img = cv2.imread(path + file)
+        imgs = [cv2.imread(image_path + file)]
         #Image.fromarray(img).show()
-        grays = [cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)]
 
         for i in xrange(3):
-            gray = grays[-1]
-            grays.append(np.rot90(gray))
+            img = imgs[-1]
+            H, W, C = img.shape
+            new_image = np.copy(img).reshape((W,H,C))
+            for i in xrange(C):
+                new_image[:,:,i] = np.rot90(img[:,:,i])
+            imgs.append(new_image)
 
-        for gray in grays:
+        for img in imgs:
             try:
-                cropped_img = cropper.crop(gray)
+                cropped_img = cropper.crop(img)
             except:
                 #traceback.print_exc()
                 continue

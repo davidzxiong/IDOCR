@@ -8,10 +8,10 @@ from torch.autograd import Variable
 class CNN(nn.Module):
     def __init__(self, hidden_size):
         super(CNN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
+        self.conv1 = nn.Conv2d(3, 10, kernel_size=5)
         self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
         self.conv2_drop = nn.Dropout2d()
-        self.linear = nn.Linear(20 * 27 * 137, hidden_size)
+        self.linear = nn.Linear(20 * 53 * 53, hidden_size)
         self.bn = nn.BatchNorm1d(hidden_size, momentum=0.01)
         self.init_weights()
 
@@ -23,7 +23,7 @@ class CNN(nn.Module):
     def forward(self, image):
         x = F.relu(F.max_pool2d(self.conv1(image), 2))
         x = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(x)), 2))
-        x = x.view(-1, 20 * 27 * 137)
+        x = x.view(-1, 20 * 53 * 53)
         features = self.bn(self.linear(x))
         return features
 
